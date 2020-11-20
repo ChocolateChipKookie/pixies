@@ -70,6 +70,16 @@ public:
         changed = false;
     }
 
+    Texture(Texture& other) = delete;
+
+
+    ~Texture(){
+        glDeleteTextures(1, &_texture);
+        glDeleteBuffers(1, &_vbo);
+        glDeleteBuffers(1, &_ebo);
+        glDeleteVertexArrays(1, &_vao);
+    }
+
     [[nodiscard]]
     size_t getWidth() const {
         return width;
@@ -177,6 +187,15 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
+    Pixies(Pixies& other) = delete;
+
+    ~Pixies(){
+        glDeleteBuffers(2, _vbo);
+        glDeleteVertexArrays(1, &_vao);
+    }
+
+    // TODO
+
     void draw(std::shared_ptr<kki::Shader> shader) override{
         shader->use();
         glBindVertexArray(_vao);
@@ -206,12 +225,12 @@ class NoiseBackground : public Texture{
     float current_z = 0.f;
 
 public:
-    NoiseBackground(int width, int height)
+    NoiseBackground(int width, int height, FastNoiseLite::NoiseType noiseType, FastNoiseLite::FractalType fractalType, size_t octaves)
             :   Texture(width, height)
     {
-        noise.SetNoiseType(FastNoiseLite::NoiseType_OpenSimplex2);
-        noise.SetFractalType(FastNoiseLite::FractalType_FBm);
-        noise.SetFractalOctaves(2);
+        noise.SetNoiseType(noiseType);
+        noise.SetFractalType(fractalType);
+        noise.SetFractalOctaves(octaves);
     }
 
     void update() override{
@@ -346,7 +365,6 @@ public:
     }
 };
 
-
 int main()
 {
     float width{720}, height{720};
@@ -360,7 +378,12 @@ int main()
 
     size_t number_of_pixies = 100000;
 
-    NoiseBackground background(500, 500);
+    NoiseBackground background(
+            500, 500,
+            FastNoiseLite::NoiseType_OpenSimplex2,
+            FastNoiseLite::FractalType_FBm,
+            2
+            );
     PlanktonPixies pixies(background, number_of_pixies, true);
 
 
