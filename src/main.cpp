@@ -1,410 +1,243 @@
 #include <iostream>
-#include "Context.h"
-#include "Shader.h"
-#include <array>
 #include <memory>
-#include <utility>
-#include <glm/vec2.hpp>
-#include <glm/glm.hpp>
-#include <kki/random.h>
 #include <chrono>
 #include <thread>
-#include <FastNoiseLite.h>
 #include <cstring>
 
-class Drawable{
-    virtual void draw(std::shared_ptr<kki::Shader> shader) = 0;
-};
+#include "Context.h"
+#include "Shader.h"
+#include "InputMonitor.h"
+#include "Background.h"
+#include "Pixies/PerlinNoisedPlanktonPixies.h"
+#include "Pixies/NoisedPlanktonPixies.h"
+#include "Pixies/PlanktonPixies.h"
 
-class Texture : public Drawable{
-private:
-    unsigned _texture{0};
-    unsigned _vao{}, _vbo{}, _ebo{};
-    //                  Positions       Texture coords
-    float vertices[16]={ -1.f, -1.f,     0.f, 0.f,
-                          1.f, -1.f,     1.f, 0.f,
-                          1.f,  1.f,     1.f, 1.f,
-                         -1.f,  1.f,     0.f, 1.f};
-    unsigned indeces[6] = {0, 1, 2, 0, 2, 3};
-
-protected:
-    std::vector<glm::vec3> texture_data;
-    size_t width;
-    size_t height;
-    bool changed = false;
-public:
-
-    Texture(int width, int height)
-        : texture_data(width * height),
-          width(width),
-          height(height)
-
-    {
-        // VAO and VBO
-        glGenVertexArrays(1, &_vao);
-        glBindVertexArray(_vao);
-
-        glGenBuffers(1, &_vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, _vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<void*>(0));
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, reinterpret_cast<void*>(2 * sizeof(float)));
-        glEnableVertexAttribArray(1);
-
-        glGenBuffers(1, &_ebo);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _ebo);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indeces), indeces, GL_STATIC_DRAW);
-
-        glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-        glGenTextures(1, &_texture);
-        glBindTexture(GL_TEXTURE_2D, _texture);
-        //Set texture filtering parameters
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, texture_data.data());
-        glBindTexture(GL_TEXTURE_2D, 0);
-        changed = false;
+kki::Texture* backgroundFactory(int argc, char* argv[], kki::Context& context){
+    if (argc < 2) {
+        std::cout << "At least one argument required, possible arguments:"
+                  << "\n\tplankton"
+                  << "\n\tnoisy"
+                  << "\n\tperlin"
+                  << "\n\tnaive"
+                  << std::endl;
+        throw std::invalid_argument("At least 1 arguments required!");
     }
 
-    Texture(Texture& other) = delete;
+    std::string type(argv[1]);
 
+    int background_scale                    = 3;
+    FastNoiseLite::NoiseType    noiseType   = FastNoiseLite::NoiseType_Perlin;
+    FastNoiseLite::FractalType  fractalType = FastNoiseLite::FractalType_FBm;
+    size_t                      octaves     = 2;
 
-    ~Texture(){
-        glDeleteTextures(1, &_texture);
-        glDeleteBuffers(1, &_vbo);
-        glDeleteBuffers(1, &_ebo);
-        glDeleteVertexArrays(1, &_vao);
+    if (type == "perlin"){
+        return new PerlinNoiseBackground(
+            static_cast<int>(context.getWidth() / background_scale),
+            static_cast<int>(context.getHeight() / background_scale)
+            );
+    }
+    else if (
+            type == "noisy" ||
+            type == "plankton" ||
+            type == "naive"
+        ){
+        return new NoiseBackground(
+            static_cast<int>(context.getWidth() / background_scale),
+            static_cast<int>(context.getHeight() / background_scale),
+            noiseType,
+            fractalType,
+            octaves);
+    }
+    throw std::invalid_argument("Pixie type not supported!");
+}
+
+kki::Pixies* pixieFactory(int argc, char* argv[], kki::Texture* background){
+    if (argc < 2) {
+        std::cout << "At least one argument required, possible arguments:"
+                  << "\n\tplankton"
+                  << "\n\tnoisy"
+                  << "\n\tperlin"
+                  << "\n\tnaive"
+                  << std::endl;
+        throw std::invalid_argument("At least 1 arguments required!");
     }
 
-    [[nodiscard]]
-    size_t getWidth() const {
-        return width;
-    }
+    std::string type{argv[1]};
 
-    [[nodiscard]]
-    size_t getHeight() const {
-        return height;
-    }
-
-
-    glm::vec3& operator()(size_t x, size_t y){
-        return texture_data[y * width + x];
-    }
-
-    glm::vec3& at(size_t x, size_t y){
-        return texture_data[y * width + x];
-    }
-
-    virtual void update() = 0;
-
-    void updateTexture(){
-        glBindTexture(GL_TEXTURE_2D, _texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, texture_data.data());
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    void draw(std::shared_ptr<kki::Shader> shader) override{
-        shader->use();
-        if (changed){
-            updateTexture();
-        }
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, _texture);
-        glBindVertexArray(_vao);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-};
-
-class Pixies : public Drawable{
-private:
-    unsigned _vao{}, _vbo[2]{};
-protected:
-    std::vector<glm::vec2> positions;
-    std::vector<glm::vec3> colours;
-    size_t pixies;
-public:
-
-    Pixies(std::vector<glm::vec2>  vertices, std::vector<glm::vec3>  colours)
-            : positions(std::move(vertices)),
-              colours(std::move(colours)),
-              pixies(positions.size())
-    {
-        assert(vertices.size() == colours.size());
-        glGenVertexArrays(1, &_vao);
-        glBindVertexArray(_vao);
-
-        glGenBuffers(2, _vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, _vbo[0]);
-        glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(positions[0]), positions.data(), GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(positions[0]), reinterpret_cast<void*>(0));
-        glEnableVertexAttribArray(0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, _vbo[1]);
-        glBufferData(GL_ARRAY_BUFFER, colours.size() * sizeof(colours[0]), colours.data(), GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(colours[0]), reinterpret_cast<void*>(0));
-        glEnableVertexAttribArray(1);
-
-        glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-    }
-
-    explicit Pixies(size_t count, bool random_start = true)
-            : pixies(count)
-    {
-        if (random_start){
-            auto rng = kki::rng::global;
-            positions.reserve(pixies);
-            for (size_t i = 0; i < pixies; ++i){
-                positions.emplace_back(rng.randomReal(-1.f, 1.f), rng.randomReal(-1.f, 1.f));
+    if      (type == "noisy"){
+        try{
+            if (argc < 7){
+                throw std::invalid_argument("");
             }
-            colours.resize(pixies, {1, 0, 0});
-        } else {
-            positions.resize(pixies);
-            colours.resize(pixies, {1, 0, 0});
+            unsigned count  = std::stoi(argv[2]);
+            float speed     = std::stof(argv[3]);
+            float acc       = std::stof(argv[4]);
+            float scale     = std::stof(argv[5]);
+            float rand      = std::stof(argv[6]);
+
+            NoisedPlanktonPixies::Setup setup{count, speed, acc, scale, rand,true};
+            return new NoisedPlanktonPixies(background, setup);
         }
-
-        glGenVertexArrays(1, &_vao);
-        glBindVertexArray(_vao);
-
-        glGenBuffers(2, _vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, _vbo[0]);
-        glBufferData(GL_ARRAY_BUFFER, positions.size() * sizeof(positions[0]), positions.data(), GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(positions[0]), reinterpret_cast<void*>(0));
-        glEnableVertexAttribArray(0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, _vbo[1]);
-        glBufferData(GL_ARRAY_BUFFER, colours.size() * sizeof(colours[0]), colours.data(), GL_DYNAMIC_DRAW);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(colours[0]), reinterpret_cast<void*>(0));
-        glEnableVertexAttribArray(1);
-
-        glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-    }
-
-    Pixies(Pixies& other) = delete;
-
-    ~Pixies(){
-        glDeleteBuffers(2, _vbo);
-        glDeleteVertexArrays(1, &_vao);
-    }
-
-    // TODO
-
-    void draw(std::shared_ptr<kki::Shader> shader) override{
-        shader->use();
-        glBindVertexArray(_vao);
-        glDrawArrays(GL_POINTS, 0, positions.size());
-
-    }
-
-    void updateBuffer(){
-        glBindBuffer(GL_ARRAY_BUFFER, _vbo[0]);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, positions.size() * sizeof(positions[0]), positions.data());
-        glBindBuffer(GL_ARRAY_BUFFER, _vbo[1]);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, colours.size() * sizeof(colours[0]), colours.data());
-    }
-
-    virtual void update(size_t i) = 0;
-
-    void updateAll(){
-        for(size_t i = 0; i < pixies; ++i){
-            update(i);
+        catch (...){
+            std::cout << "6 arguments required, arguments:"
+                      << "\n\t1) Type (noisy)"
+                      << "\n\t2) Count of pixies        (int)"
+                      << "\n\t3) Max speed of pixies    (float)"
+                      << "\n\t4) Acceleration of pixies (float)"
+                      << "\n\t5) Noise scaling factor   (float)"
+                      << "\n\t6) Random noise intensity (float)"
+                      << std::endl;
+            throw std::invalid_argument("6 arguments required!");
         }
-        updateBuffer();
     }
-};
-
-class NoiseBackground : public Texture{
-    FastNoiseLite noise;
-    float current_z = 0.f;
-
-public:
-    NoiseBackground(int width, int height, FastNoiseLite::NoiseType noiseType, FastNoiseLite::FractalType fractalType, size_t octaves)
-            :   Texture(width, height)
-    {
-        noise.SetNoiseType(noiseType);
-        noise.SetFractalType(fractalType);
-        noise.SetFractalOctaves(octaves);
-    }
-
-    void update() override{
-        float x = 0.f;
-        float x_inc = 2.f;
-        float y = 0.f;
-        float y_inc = 2.f;
-
-        Texture& tex = *this;
-
-        for (unsigned y_i = 0; y_i < height; y_i++){
-            for (unsigned x_i = 0; x_i < width; x_i++){
-                float val = noise.GetNoise(x, y, current_z);
-                tex(x_i, y_i) = {val, val, val};
-                x += x_inc;
+    else if (type == "perlin"){
+        try{
+            if (argc < 7){
+                throw std::invalid_argument("");
             }
-            y += y_inc;
-            x = 0.f;
+            unsigned count  = std::stoi(argv[2]);
+            float speed     = std::stof(argv[3]);
+            float acc       = std::stof(argv[4]);
+            float scale     = std::stof(argv[5]);
+            float rand      = std::stof(argv[6]);
+
+            PerlinNoisedPlanktonPixies::Setup setup{count, speed, acc, scale, rand,true};
+            return new PerlinNoisedPlanktonPixies(background, setup);
         }
-
-        changed = true;
-        current_z += 0.5;
-    }
-
-};
-
-class NaivePixies : public Pixies{
-private:
-    kki::Random& rng = kki::rng::global;
-    const float PI = 3.141592;
-    const float noise_mapping = 4 * PI;
-
-    struct pixieData{
-        float speed = 0;
-        float direction = 0;
-    };
-
-    std::vector<pixieData> _data;
-    NoiseBackground& _background;
-public:
-    explicit NaivePixies(NoiseBackground& background, size_t count, bool random_start)
-            :   Pixies(count, random_start), _background(background)
-    {
-        _data.reserve(count);
-        for (unsigned i = 0; i < count; ++i){
-            _data.push_back({0.01, rng.randomReal(0.f, 2 * PI)});
+        catch (...){
+            std::cout << "6 arguments required, arguments:"
+                      << "\n\t1) Type (perlin)"
+                      << "\n\t2) Count of pixies        (int)"
+                      << "\n\t3) Max speed of pixies    (float)"
+                      << "\n\t4) Acceleration of pixies (float)"
+                      << "\n\t5) Noise scaling factor   (float)"
+                      << "\n\t6) Random noise intensity (float)"
+                      << std::endl;
+            throw std::invalid_argument("6 arguments required!");
         }
     }
+    else if (type == "plankton"){
+        try {
+            if (argc < 6){
+                throw std::invalid_argument("");
+            }
 
-    void update(size_t i) override{
-        auto& pos = positions[i];
-        auto& col = colours[i];
-        auto& mov = _data[i];
+            unsigned count  = std::stoi(argv[2]);
+            float speed     = std::stof(argv[3]);
+            float acc       = std::stof(argv[4]);
+            float scale     = std::stof(argv[5]);
 
-        // Update direction
-        float val = _background(static_cast<size_t>((pos.x + 1.f) * 499.f / 2.f), static_cast<size_t>((pos.y + 1.f) * 499.f / 2.f))[0];
-        mov.direction = val * noise_mapping;
-
-
-        // Update position
-        float d_x = glm::cos(mov.direction) * mov.speed;
-        float d_y = glm::sin(mov.direction) * mov.speed;
-
-        pos.x = pos.x + d_x;
-        pos.y = pos.y + d_y;
-
-        // If they are outside, reassign the position
-        if ( pos.x < -0.99f || pos.y > 0.99f){
-            pos = {rng.randomReal(-0.99f, 0.99f), rng.randomReal(-0.99f, 0.99f)};
+            PlanktonPixies::Setup setup{count, speed, acc, scale, true};
+            return new PlanktonPixies(background, setup);
         }
-
-        // Update colour
-        auto red = [](float x){return std::min(std::max(std::abs(6 * x - 3) - 1, 0.f), 0.99f);};
-        auto green = [](float x){return std::min(std::max(-std::abs(6 * x - 2) + 2, 0.f), 0.99f);};
-        auto blue = [](float x){return std::min(std::max(-std::abs(6 * x - 4) + 2, 0.f), 0.99f);};
-
-        col = {red(val), green(val), blue(val)};
+        catch (...){
+            std::cout << "5 arguments required, arguments:"
+                      << "\n\t1) Type (plankton)"
+                      << "\n\t2) Count of pixies        (int)"
+                      << "\n\t3) Max speed of pixies    (float)"
+                      << "\n\t4) Acceleration of pixies (float)"
+                      << "\n\t5) Noise scaling factor   (float)"
+                      << std::endl;
+            throw std::invalid_argument("5 arguments required!");
+        }
     }
-};
+    else if (type == "naive"){
+        try{
+            if (argc < 3){
+                throw std::invalid_argument("");
+            }
 
-class PlanktonPixies : public Pixies{
-private:
-    kki::Random& rng = kki::rng::global;
-    const float PI = 3.141592;
-    const float noise_mapping = 4 * PI;
-
-    const float _max_speed = 0.01;
-//    const float _acceleration = 0.0015;   // Perlin 3 octaves
-    const float _acceleration = 0.0065;
-
-    std::vector<glm::vec2> _speed;
-    NoiseBackground& _background;
-public:
-    explicit PlanktonPixies(NoiseBackground& background, size_t count, bool random_start)
-            :   Pixies(count, random_start), _background(background)
-    {
-        _speed.reserve(count);
-        for (unsigned i = 0; i < count; ++i){
-            _speed.emplace_back(0.f, 0.f);
+            unsigned count  = std::stoi(argv[2]);
+            return new NaivePixies(background, count, true);
+        }
+        catch (...){
+            std::cout << "2 argument required, arguments:"
+                      << "\n\t1) Type (plankton)"
+                      << "\n\t2) Count of pixies        (int)"
+                      << std::endl;
+            throw std::invalid_argument("2 arguments required!");
         }
     }
 
-    void update(size_t i) override{
-        auto& pos = positions[i];
-        auto& col = colours[i];
-        auto& mov = _speed[i];
+    throw std::invalid_argument("Noise type does not exist");
+}
 
-        // Update direction
-        float val = _background(static_cast<size_t>((pos.x + 1.f) * 499.f / 2.f), static_cast<size_t>((pos.y + 1.f) * 499.f / 2.f))[0];
-        float angle = val * noise_mapping;
+/*
+Configurations:
+ Guzvanje:
+    plankton 100000 0.001 0.0015 2.0
+ Rings:
+    plankton 100000 0.01 0.0075 16.0
+ Stripes:
+    plankton 250000 0.005 0.0005 4.0
+ Silk:
+    plankton 250000 0.01 0.0005 4.0
+ Phoenix:
+    plankton 500000 0.005 0.0005 6.0
+ Noisy phoenix:
+    noisy 100000 0.005 0.0002 6.0 0.001
+ */
 
-        glm::vec2 d_v{glm::cos(angle), glm::sin(angle)};
-        mov += d_v * _acceleration;
-        if (glm::length(mov) > _max_speed){
-            mov = glm::normalize(mov) * _max_speed;
-        }
-
-        // Update position
-        pos += mov;
-
-        // If they are outside, reassign the position
-        if ( pos.x < -0.99f || pos.y > 0.99f){
-            pos = {rng.randomReal(-0.99f, 0.99f), rng.randomReal(-0.99f, 0.99f)};
-        }
-
-        // Update colour
-        auto red = [](float x){return std::min(std::max(std::abs(6 * x - 3) - 1, 0.f), 0.99f);};
-        auto green = [](float x){return std::min(std::max(-std::abs(6 * x - 2) + 2, 0.f), 0.99f);};
-        auto blue = [](float x){return std::min(std::max(-std::abs(6 * x - 4) + 2, 0.f), 0.99f);};
-
-        col = {red(val), green(val), blue(val)};
-    }
-};
-
-int main()
+int main(int argc, char* argv[])
 {
-    float width{720}, height{720};
+    // Animation parameters
+    int width               = 720;
+    int height              = 720;
+
+    // Drawing
+    bool draw_background    = false;
+    bool draw_pixies        = true;
+    // Duration of frame
+    std::chrono::milliseconds frame_len(30);
+
+
+    // Window init
     kki::Context window(width, height, "Name");
+    kki::InputMonitor input ({GLFW_KEY_UP, GLFW_KEY_DOWN, GLFW_KEY_LEFT, GLFW_KEY_RIGHT, GLFW_KEY_R}, window);
     window.bind();
 
+    // Shaders init
     auto shader = std::make_shared<kki::Shader>("../src/shaders/pixies.glsl");
     auto background_shader = std::make_shared<kki::Shader>("../src/shaders/texture.glsl");
     background_shader->use();
-    background_shader->setFloat("colour", 1, 0, 0);
-
-    size_t number_of_pixies = 100000;
-
-    NoiseBackground background(
-            500, 500,
-            FastNoiseLite::NoiseType_OpenSimplex2,
-            FastNoiseLite::FractalType_FBm,
-            2
-            );
-    PlanktonPixies pixies(background, number_of_pixies, true);
 
 
-    std::chrono::milliseconds frame_len(30);
-    while (!window.should_close())
+    auto noise = backgroundFactory(argc, argv, window);
+    kki::Pixies* pixies = pixieFactory(argc, argv, noise);
+
+    while (!window.shouldClose())
     {
         auto begin = std::chrono::steady_clock::now();
         glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        background.update();
-        //background.draw(background_shader);
+        noise->update();
+        if(draw_background) noise->draw(background_shader);
 
-        pixies.updateAll();
-        pixies.draw(shader);
+        pixies->updateAll();
+        if (draw_pixies) pixies->draw(shader);
 
-        window.swap_buffers();
+        window.swapBuffers();
         auto end = std::chrono::steady_clock::now();
         std::this_thread::sleep_for(frame_len - (end - begin));
-        window.reset_viewport();
-        window.poll_events();
+        window.resetViewport();
+        window.pollEvents();
+
+        if (input[GLFW_KEY_UP]){
+            draw_background = true;
+        }
+        else if (input[GLFW_KEY_DOWN]){
+            draw_background = false;
+        }
+        if (input[GLFW_KEY_RIGHT]){
+            draw_pixies = true;
+        }
+        else if (input[GLFW_KEY_LEFT]){
+            draw_pixies = false;
+        }
+        if (input[GLFW_KEY_R]){
+            pixies->resetPositions();
+        }
     }
     return 0;
 }

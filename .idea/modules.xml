@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/kookie_engine.iml" filepath="$PROJECT_DIR$/.idea/kookie_engine.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/pixies.iml" filepath="$PROJECT_DIR$/.idea/pixies.iml" />
     </modules>
   </component>
 </project>

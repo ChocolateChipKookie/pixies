@@ -39,7 +39,7 @@ kki::Context::Context(int width,
     this->context_ = window;
 }
 
-void kki::Context::default_hints() {
+void kki::Context::defaultHints() {
     // Needed window hints
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -47,20 +47,20 @@ void kki::Context::default_hints() {
     glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 }
 
-void kki::Context::default_options() {
+void kki::Context::defaultOptions() {
 }
 
-void kki::Context::apply_options(const std::function<void()> &window_options) {
+void kki::Context::applyOptions(const std::function<void()> &window_options) {
     this->bind();
     window_options();
 }
 
-void kki::Context::framebuffer_size_callback(GLFWwindow* window, int width, int height)
+void kki::Context::framebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
 }
 
-void kki::Context::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void kki::Context::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
@@ -82,8 +82,8 @@ kki::Context::Context(int width, int height, const std::string &name, bool depth
     }
 
     glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetKeyCallback(window, key_callback);
+    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+    glfwSetKeyCallback(window, keyCallback);
 
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
     {
@@ -114,27 +114,27 @@ kki::Context::~Context()
 //  Handling functions
 //
 
-bool kki::Context::should_close() const
+bool kki::Context::shouldClose() const
 {
     return glfwWindowShouldClose(context_);
 }
 
-void kki::Context::set_should_close(bool value) const
+void kki::Context::setShouldClose(bool value) const
 {
     glfwSetWindowShouldClose(context_, value);
 }
 
-void kki::Context::swap_buffers() const
+void kki::Context::swapBuffers() const
 {
     glfwSwapBuffers(context_);
 }
 
-void kki::Context::poll_events()
+void kki::Context::pollEvents()
 {
     glfwPollEvents();
 }
 
-void kki::Context::wait_events(double seconds)
+void kki::Context::waitEvents(double seconds)
 {
     if(seconds < 0.){
         glfwWaitEvents();
@@ -144,15 +144,15 @@ void kki::Context::wait_events(double seconds)
     }
 }
 
-void kki::Context::set_viewport(int width, int height) const {
+void kki::Context::setViewport(int width, int height) const {
     glViewport(0, 0, width, height);
 }
 
-void kki::Context::reset_viewport() const
+void kki::Context::resetViewport() const
 {
     int width, height;
     glfwGetWindowSize(context_, &width, &height);
-    set_viewport(width, height);
+    setViewport(width, height);
 }
 
 void kki::Context::resize(int width, int height) const
@@ -160,26 +160,26 @@ void kki::Context::resize(int width, int height) const
     glfwSetWindowSize(context_, width, height);
 }
 
-unsigned kki::Context::get_width() const
+unsigned kki::Context::getWidth() const
 {
     int width, height;
     glfwGetWindowSize(context_, &width, &height);
     return width;
 }
 
-unsigned kki::Context::get_height() const
+unsigned kki::Context::getHeight() const
 {
     int width, height;
     glfwGetWindowSize(context_, &width, &height);
     return height;
 }
 
-void kki::Context::set_process_input(void(*function)(GLFWwindow*, int, int, int, int)) const
+void kki::Context::setKeyCallback(void(*function)(GLFWwindow*, int, int, int, int)) const
 {
     glfwSetKeyCallback(context_, function);
 }
 
-void kki::Context::set_resize_callback(void(*function)(GLFWwindow*, int, int)) const {
+void kki::Context::setResizeCallback(void(*function)(GLFWwindow*, int, int)) const {
     glfwSetFramebufferSizeCallback(context_, function);
 }
 
@@ -189,15 +189,15 @@ void kki::Context::bind()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void kki::Context::set_clear_colour(float r, float g, float b, float a) {
+void kki::Context::setClearColour(float r, float g, float b, float a) {
     glClearColor(r, g, b, a);
 }
 
-void kki::Context::set_clear_colour(const glm::vec4& colour) {
+void kki::Context::setClearColour(const glm::vec4& colour) {
     glClearColor(colour.r, colour.g, colour.b, colour.a);
 }
 
-void kki::Context::set_clear_colour(const glm::vec3& colour) {
+void kki::Context::setClearColour(const glm::vec3& colour) {
     glClearColor(colour.r, colour.g, colour.b, 1.f);
 }
 

@@ -14,53 +14,53 @@
 
 namespace kki{
     class Context {
+    private:
+        static void defaultHints();
+        static void defaultOptions();
+
     public:
-        static void default_hints();
-        static void default_options();
 
         // Context using custom window hints and options
         Context(
                 int width,
                 int height,
                 const std::string& name,
-                const std::function<void()>& window_hints = default_hints,
-                const std::function<void()>& window_options = default_options);
+                const std::function<void()>& window_hints = defaultHints,
+                const std::function<void()>& window_options = defaultOptions);
         // Windowed context
         Context(int width, int height, const std::string& name, bool depth, bool alpha);
         // Destructor
         ~Context();
 
         // Apply options
-        void apply_options(const std::function<void()>& window_options);
+        void applyOptions(const std::function<void()>& window_options);
 
-        [[nodiscard]] bool should_close() const;
+        [[nodiscard]] bool shouldClose() const;
 
-        void set_process_input(void(*function)(GLFWwindow*, int, int, int, int)) const;
-        void set_resize_callback(void(*function)(GLFWwindow*, int, int)) const;
-        void set_should_close(bool value) const;
-        void swap_buffers() const;
-        void poll_events();
+        void setKeyCallback(void(*function)(GLFWwindow*, int, int, int, int)) const;
+        void setResizeCallback(void(*function)(GLFWwindow*, int, int)) const;
+        void setShouldClose(bool value) const;
+        void swapBuffers() const;
+        void pollEvents();
         //Blocks thread, waits for seconds amount of seconds for new event
         //Unblocks when event occurs
         //If seconds is < 0 it blocks the thread completly
-        void wait_events(double seconds = -1.);
-        void set_viewport(int width, int height) const;
-        void reset_viewport() const;
+        void waitEvents(double seconds = -1.);
+        void setViewport(int width, int height) const;
+        void resetViewport() const;
         void resize(int width, int height) const;
-        [[nodiscard]] unsigned get_width() const;
-        [[nodiscard]] unsigned get_height() const;
+        [[nodiscard]] unsigned getWidth() const;
+        [[nodiscard]] unsigned getHeight() const;
         void bind();
 
-        void set_clear_colour(float r, float g, float b, float a = 1.f);
-        void set_clear_colour(const glm::vec4& colour);
-        void set_clear_colour(const glm::vec3& colour);
-
+        void setClearColour(float r, float g, float b, float a = 1.f);
+        void setClearColour(const glm::vec4& colour);
+        void setClearColour(const glm::vec3& colour);
 
     private:
 
-        static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-
-        static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+        static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
+        static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
         GLFWwindow* context_{nullptr};
     };
